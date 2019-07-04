@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
+ * 最少活跃数
  * LeastActiveLoadBalance
  */
 public class LeastActiveLoadBalance extends AbstractLoadBalance {
@@ -62,10 +63,12 @@ public class LeastActiveLoadBalance extends AbstractLoadBalance {
             }
         }
         // assert(leastCount > 0)
+        //如果只有一个最小活跃数，则返回
         if (leastCount == 1) {
             // If we got exactly one invoker having the least active value, return this invoker directly.
             return invokers.get(leastIndexes[0]);
         }
+        //有多个 Invoker 具有相同的最小活跃数，但他们的权重不同
         if (!sameWeight && totalWeight > 0) {
             // If (not every invoker has the same weight & at least one invoker's weight>0), select randomly based on totalWeight.
             int offsetWeight = ThreadLocalRandom.current().nextInt(totalWeight) + 1;
