@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 平滑加权轮询负载均衡
+ * 每个服务器对应两个权重，分别为 weight 和 currentWeight。其中 weight 是固定的，currentWeight 是会动态调整，初始值为0。当有新的请求进来时，遍历服务器列表，让它的 currentWeight 加上自身权重。遍历完成后，找到最大的 currentWeight，并将其减去权重总和，然后返回相应的服务器即可。
  * Round robin load balance.
  */
 public class RoundRobinLoadBalance extends AbstractLoadBalance {

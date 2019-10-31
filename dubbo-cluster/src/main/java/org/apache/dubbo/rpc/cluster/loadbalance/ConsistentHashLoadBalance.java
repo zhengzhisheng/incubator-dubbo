@@ -45,8 +45,12 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
     protected <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
         String methodName = RpcUtils.getMethodName(invocation);
         String key = invokers.get(0).getUrl().getServiceKey() + "." + methodName;
+
+        // 获取 invokers 原始的 hashcode
         int identityHashCode = System.identityHashCode(invokers);
         ConsistentHashSelector<T> selector = (ConsistentHashSelector<T>) selectors.get(key);
+        // 如果 invokers 是一个新的 List 对象，意味着服务提供者数量发生了变化，可能新增也可能减少了。
+        // 此时 selector.identityHashCode != identityHashCode 条件成立
         if (selector == null || selector.identityHashCode != identityHashCode) {
             selectors.put(key, new ConsistentHashSelector<T>(invokers, methodName, identityHashCode));
             selector = (ConsistentHashSelector<T>) selectors.get(key);
@@ -81,9 +85,16 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
                 String address = invoker.getUrl().getAddress();
                 //replicaNumber默认为160
                 for (int i = 0; i < replicaNumber / 4; i++) {
+                    // 对 address + i 进行 md5 运算，得到一个长度为16的字节数组
                     byte[] digest = md5(address + i);
+                    // 对 digest 部分字节进行4次 hash 运算，得到四个不同的 long 型正整数
                     for (int h = 0; h < 4; h++) {
+                        // h = 0 时，取 digest 中下标为 0 ~ 3 的4个字节进行位运算
+                        // h = 1 时，取 digest 中下标为 4 ~ 7 的4个字节进行位运算
+                        // h = 2, h = 3 时过程同上
                         long m = hash(digest, h);
+                        // 将 hash 到 invoker 的映射关系存储到 virtualInvokers 中，
+                        // virtualInvokers 中的元素要有序，因此选用 TreeMap 作为存储结构
                         virtualInvokers.put(m, invoker);
                     }
                 }
