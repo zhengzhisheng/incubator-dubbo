@@ -148,6 +148,11 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         ref = null;
     }
 
+    /**
+     * 1.监听注册中心
+       2.连接服务提供者端进行服务引用
+       3.创建服务代理并返回
+     */
     private void init() {
         if (initialized) {
             return;
@@ -306,9 +311,24 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
 
     @SuppressWarnings({"unchecked", "rawtypes", "deprecation"})
     private T createProxy(Map<String, String> map) {
+        //先判断是否是本地服务引用injvm
+        //判断是否是点对点直连
+        //判断是否是通过注册中心连接
+        //然后是服务的引用
+        //这里url为
+        //registry://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?
+        //application=dubbo-consumer&dubbo=2.5.3&pid=12272&
+        //refer=application%3Ddubbo-consumer%26dubbo%3D2.5.3%26
+        //interface%3Ddubbo.common.hello.service.HelloService%26
+        //methods%3DsayHello%26pid%3D12272%26side%3D
+        //consumer%26timeout%3D100000%26timestamp%3D1489318676447&
+        //registry=zookeeper&timestamp=1489318676641
+        //引用远程服务由Protocol的实现来处理
+        //最后返回服务代理
         URL tmpUrl = new URL("temp", "localhost", 0, map);
         final boolean isJvmRefer;
         if (isInjvm() == null) {
+            // url 配置被指定，则不做本地引用
             if (url != null && url.length() > 0) { // if a url is specified, don't do local reference
                 isJvmRefer = false;
             } else {
@@ -358,6 +378,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             }
 
             if (urls.size() == 1) {
+                //首先进入ProtocolListenerWrapper的refer方法,然后在进入ProtocolFilterWrapper的refer方法,然后再进入RegistryProtocol的refer方法
                 invoker = refprotocol.refer(interfaceClass, urls.get(0));
             } else {
                 List<Invoker<?>> invokers = new ArrayList<Invoker<?>>();
@@ -394,6 +415,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             logger.info("Refer dubbo service " + interfaceClass.getName() + " from url " + invoker.getUrl());
         }
         // create service proxy
+        //1.首先经过AbstractProxyFactory的处理 2.然后经过StubProxyFactoryWrapper的处理
         return (T) proxyFactory.getProxy(invoker);
     }
 

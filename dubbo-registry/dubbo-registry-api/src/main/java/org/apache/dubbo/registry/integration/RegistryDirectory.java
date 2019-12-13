@@ -332,10 +332,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     }
 
     /**
-     * Turn urls into invokers, and if url has been refer, will not re-reference.
-     *
-     * @param urls
-     * @return invokers
+     * 根据invokerURL列表转换为invoker列表。转换规则如下：
+     * 1.如果url已经被转换为invoker，则不在重新引用，直接从缓存中获取，注意如果url中任何一个参数变更也会重新引用
+     * 2.如果传入的invoker列表不为空，则表示最新的invoker列表
+     * 3.如果传入的invokerUrl列表是空，则表示只是下发的override规则或route规则，需要重新交叉对比，决定是否需要重新引用。
+     * @param urls 传入的参数不能为null
      */
     private Map<String, Invoker<T>> toInvokers(List<URL> urls) {
         Map<String, Invoker<T>> newUrlInvokerMap = new HashMap<String, Invoker<T>>();
@@ -345,6 +346,12 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         Set<String> keys = new HashSet<String>();
         String queryProtocols = this.queryMap.get(Constants.PROTOCOL_KEY);
         for (URL providerUrl : urls) {
+            //此时url是dubbo://192.168.110.197:20880/dubbo.common.hello.service.HelloService?anyhost=true&
+            //application=dubbo-provider&application.version=1.0&dubbo=2.5.3&environment=product&
+            //interface=dubbo.common.hello.service.HelloService&methods=sayHello&organization=china&
+            //owner=cheng.xi&pid=5631&side=provider&timestamp=1489367571986
+            //从注册中心获取到的携带提供者信息的url
+            //如果reference端配置了protocol，则只选择匹配的protocol
             // If protocol is configured at the reference side, only the matching protocol is selected
             if (queryProtocols != null && queryProtocols.length() > 0) {
                 boolean accept = false;
@@ -386,6 +393,8 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
                         enabled = url.getParameter(Constants.ENABLED_KEY, true);
                     }
                     if (enabled) {
+                        //先使用DubboProtocol的refer方法，这一步会依次调用ProtocolFIlterListenerWrapper，ProtocolFilterWrapper，DubboProtocol中的refer方法。经过两个Wrapper中，会添加对应的InvokerListener并构建Invoker Filter链，在DubboProtocol中会创建一个DubboInvoker对象，该Invoker对象持有服务Class，providerUrl，负责和服务提供端通信的ExchangeClient。
+                        //接着使用得到的Invoker创建一个InvokerDelegete
                         invoker = new InvokerDelegate<T>(protocol.refer(serviceType, url), url, providerUrl);
                     }
                 } catch (Throwable t) {

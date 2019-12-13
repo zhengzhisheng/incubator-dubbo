@@ -190,15 +190,21 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
         channel.setAttribute(KEY_READ_TIMESTAMP, System.currentTimeMillis());
         final ExchangeChannel exchangeChannel = HeaderExchangeChannel.getOrAddChannel(channel);
         try {
+            // 处理请求对象
             if (message instanceof Request) {
                 // handle request.
                 Request request = (Request) message;
                 if (request.isEvent()) {
+                    // 处理事件
                     handlerEvent(channel, request);
+                    // 处理普通的请求
                 } else {
+                    // 双向通信
                     if (request.isTwoWay()) {
+                        // 向后调用服务，并得到调用结果
                         handleRequest(exchangeChannel, request);
                     } else {
+                        // 如果是单向通信，仅向后调用指定服务即可，无需返回调用结果
                         handler.received(exchangeChannel, request.getData());
                     }
                 }

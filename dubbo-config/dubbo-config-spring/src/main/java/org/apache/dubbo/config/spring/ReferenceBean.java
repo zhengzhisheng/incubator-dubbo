@@ -61,6 +61,7 @@ public class ReferenceBean<T> extends ReferenceConfig<T> implements FactoryBean,
     }
 
     @Override
+    //继承FactoryBean，spring获取的时候会调用这个方法
     public Object getObject() {
         return get();
     }

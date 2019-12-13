@@ -93,6 +93,8 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
             if (registry != null) {
                 return registry;
             }
+            //这里用的是ZookeeperRegistryFactory
+            //返回的Registry中封装了已经连接到Zookeeper的zkClient实例
             registry = createRegistry(url);
             if (registry == null) {
                 throw new IllegalStateException("Can not create registry " + url);

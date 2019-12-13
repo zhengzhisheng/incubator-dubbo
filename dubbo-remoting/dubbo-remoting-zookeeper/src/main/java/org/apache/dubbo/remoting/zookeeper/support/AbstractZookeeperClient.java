@@ -51,14 +51,25 @@ public abstract class AbstractZookeeperClient<TargetChildListener> implements Zo
     }
 
     @Override
+    //path为
+    ///dubbo/dubbo.common.hello.service.HelloService/consumers/
+    //consumer%3A%2F%2F192.168.1.100%2F
+    //dubbo.common.hello.service.HelloService%3Fapplication%3D
+    //dubbo-consumer%26category%3Dconsumers%26check%3Dfalse%26
+    //dubbo%3D2.5.3%26interface%3D
+    //dubbo.common.hello.service.HelloService%26
+    //methods%3DsayHello%26pid%3D28819%26
+    //side%3Dconsumer%26timeout%3D100000%26timestamp%3D1489332839677
     public void create(String path, boolean ephemeral) {
         if (!ephemeral) {
+            // 如果要创建的节点类型非临时节点，那么这里要检测节点是否存在
             if (checkExists(path)) {
                 return;
             }
         }
         int i = path.lastIndexOf('/');
         if (i > 0) {
+            // 递归创建上一级路径
             create(path.substring(0, i), false);
         }
         if (ephemeral) {

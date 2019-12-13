@@ -500,6 +500,12 @@ public class ExtensionLoader<T> {
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * 通过 getExtensionClasses 获取所有的拓展类
+       通过反射创建拓展对象
+       向拓展对象中注入依赖
+       将拓展对象包裹在相应的 Wrapper 对象中
+     */
     private T createExtension(String name) {
         Class<?> clazz = getExtensionClasses().get(name);
         if (clazz == null) {
@@ -513,6 +519,10 @@ public class ExtensionLoader<T> {
             }
             injectExtension(instance);
             Set<Class<?>> wrapperClasses = cachedWrapperClasses;
+            //Wrapper的包装
+            //cachedWrapperClasses存放着所有的Wrapper类
+            //cachedWrapperClasses是在加载扩展实现类的时候放进去的
+            //Wrapper类的说明在最上面扩展点自动包装（AOP）
             if (wrapperClasses != null && !wrapperClasses.isEmpty()) {
                 for (Class<?> wrapperClass : wrapperClasses) {
                     instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
@@ -573,11 +583,19 @@ public class ExtensionLoader<T> {
     }
 
     private Map<String, Class<?>> getExtensionClasses() {
+        //从缓存中获取，cachedClasses也是一个Holder，Holder这里持有的是一个Map，key是扩展点实现名，value是扩展点实现类
+        //这里会存放当前扩展点类型的所有的扩展点的实现类
+        //这里以Protocol为例，就是会存放Protocol的所有实现类
+        //比如key为dubbo，value为com.alibaba.dubbo.rpc.protocol.dubbo.DubboProtocol
+        //cachedClasses扩展点实现名称对应的实现类
         Map<String, Class<?>> classes = cachedClasses.get();
+        //如果为null，说明没有被加载过，就会进行加载，而且加载就只会进行这一次
         if (classes == null) {
             synchronized (cachedClasses) {
                 classes = cachedClasses.get();
                 if (classes == null) {
+                    //如果没有加载过Extension的实现，进行扫描加载，完成后缓存起来
+                    //每个扩展点，其实现的加载只会这执行一次
                     classes = loadExtensionClasses();
                     cachedClasses.set(classes);
                 }
@@ -590,6 +608,9 @@ public class ExtensionLoader<T> {
     private Map<String, Class<?>> loadExtensionClasses() {
         final SPI defaultAnnotation = type.getAnnotation(SPI.class);
         if (defaultAnnotation != null) {
+            //当前Extension的默认实现名字
+            //比如说Protocol接口，注解是@SPI("dubbo")
+            //这里dubbo就是默认的值
             String value = defaultAnnotation.value();
             if ((value = value.trim()).length() > 0) {
                 String[] names = NAME_SEPARATOR.split(value);
@@ -597,6 +618,7 @@ public class ExtensionLoader<T> {
                     throw new IllegalStateException("more than 1 default extension name on extension " + type.getName()
                             + ": " + Arrays.toString(names));
                 }
+                //默认的名字保存起来
                 if (names.length == 1) {
                     cachedDefaultName = names[0];
                 }
@@ -687,6 +709,11 @@ public class ExtensionLoader<T> {
                         + ", " + clazz.getClass().getName());
             }
         } else if (isWrapperClass(clazz)) {
+            //判断是否是wrapper类型
+            //如果得到的实现类的构造方法中的参数是扩展点类型的，就是一个Wrapper类
+            //比如ProtocolFilterWrapper，实现了Protocol类，
+            //而它的构造方法是这样public ProtocolFilterWrapper(Protocol protocol)
+            //就说明这个类是一个包装类
             Set<Class<?>> wrappers = cachedWrapperClasses;
             if (wrappers == null) {
                 cachedWrapperClasses = new ConcurrentHashSet<Class<?>>();
@@ -760,16 +787,33 @@ public class ExtensionLoader<T> {
     }
 
     private Class<?> getAdaptiveExtensionClass() {
+        //加载当前Extension的所有实现（这里举例是Protocol，只会加载Protocol的所有实现类），如果有@Adaptive类型的实现类，会赋值给cachedAdaptiveClass
+        //目前只有AdaptiveExtensionFactory和AdaptiveCompiler两个实现类是被注解了@Adaptive
+        //除了ExtensionFactory和Compiler类型的扩展之外，其他类型的扩展都是下面动态创建的的实现
         getExtensionClasses();
+        //加载完所有的实现之后，发现有cachedAdaptiveClass不为空
+        //也就是说当前获取的自适应实现类是AdaptiveExtensionFactory或者是AdaptiveCompiler，就直接返回，这两个类是特殊用处的，不用代码生成，而是现成的代码
         if (cachedAdaptiveClass != null) {
             return cachedAdaptiveClass;
         }
+        //没有找到Adaptive类型的实现，动态创建一个
+        //比如Protocol的实现类，没有任何一个实现是用@Adaptive来注解的，只有Protocol接口的方法是有注解的
+        //这时候就需要来动态的生成了，也就是生成Protocol$Adaptive
         return cachedAdaptiveClass = createAdaptiveExtensionClass();
     }
 
     private Class<?> createAdaptiveExtensionClass() {
+        //组装自适应扩展点类的代码
         String code = createAdaptiveExtensionClassCode();
+        //获取到应用的类加载器
         ClassLoader classLoader = findClassLoader();
+        //获取编译器
+        //dubbo默认使用javassist
+        //这里还是使用扩展点机制来找具体的Compiler的实现
+        //现在就知道cachedAdaptiveClass是啥意思了，如果没有AdaptiveExtensionFactory和AdaptiveCompiler这两个类，这里又要去走加载流程然后来生成扩展点类的代码，不就死循环了么。
+        //这里解析Compiler的实现类的时候，会在getAdaptiveExtensionClass中直接返回
+        //可以查看下AdaptiveCompiler这个类，如果我们没有指定，默认使用javassist
+        //这里Compiler是JavassistCompiler实例
         org.apache.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(org.apache.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
         return compiler.compile(code, classLoader);
     }

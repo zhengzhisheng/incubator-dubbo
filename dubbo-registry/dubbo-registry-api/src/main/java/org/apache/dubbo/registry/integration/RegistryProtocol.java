@@ -123,24 +123,35 @@ public class RegistryProtocol implements Protocol {
     }
 
     public void register(URL registryUrl, URL registedProviderUrl) {
+        // 获取 Registry
         Registry registry = registryFactory.getRegistry(registryUrl);
+        //注册服务
+        //FailbackRegistry
         registry.register(registedProviderUrl);
     }
 
     @Override
+    /**
+     * 1.调用 doLocalExport 导出服务
+       2.向注册中心注册服务
+       3.向注册中心进行订阅 override 数据
+       4.创建并返回 DestroyableExporter
+     */
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
         //export invoker
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker);
 
         URL registryUrl = getRegistryUrl(originInvoker);
 
-        //registry provider
+        // 获取注册中心 URL，以 zookeeper 注册中心为例，得到的示例 URL 如下：
+        // zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
         final Registry registry = getRegistry(originInvoker);
         final URL registeredProviderUrl = getRegisteredProviderUrl(originInvoker);
 
         //to judge to delay publish whether or not
         boolean register = registeredProviderUrl.getParameter("register", true);
 
+        // 向服务提供者与消费者注册表中注册服务提供者
         ProviderConsumerRegTable.registerProvider(originInvoker, registryUrl, registeredProviderUrl);
 
         if (register) {
@@ -167,6 +178,7 @@ public class RegistryProtocol implements Protocol {
                 exporter = (ExporterChangeableWrapper<T>) bounds.get(key);
                 if (exporter == null) {
                     final Invoker<?> invokerDelegete = new InvokerDelegete<T>(originInvoker, getProviderUrl(originInvoker));
+                    // 调用 protocol 的 export 方法导出服务
                     exporter = new ExporterChangeableWrapper<T>((Exporter<T>) protocol.export(invokerDelegete), originInvoker);
                     bounds.put(key, exporter);
                 }
@@ -270,7 +282,17 @@ public class RegistryProtocol implements Protocol {
 
     @Override
     @SuppressWarnings("unchecked")
+    //创建 Invoker
+    //Invoker 是 Dubbo 的核心模型，代表一个可执行体。在服务提供方，Invoker 用于调用服务提供类。在服务消费方，Invoker 用于执行远程调用。
     public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        //这里获得的url是
+        //zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?
+        //application=dubbo-consumer&dubbo=2.5.3&pid=12272&
+        //refer=application%3Ddubbo-consumer%26dubbo%3D2.5.3%26
+        //interface%3Ddubbo.common.hello.service.HelloService%26
+        //methods%3DsayHello%26pid%3D12272%26side%3D
+        //consumer%26timeout%3D100000%26
+        //timestamp%3D1489318676447&timestamp=1489318676641
         url = url.setProtocol(url.getParameter(Constants.REGISTRY_KEY, Constants.DEFAULT_REGISTRY)).removeParameter(Constants.REGISTRY_KEY);
         Registry registry = registryFactory.getRegistry(url);
         if (RegistryService.class.equals(type)) {
@@ -299,12 +321,23 @@ public class RegistryProtocol implements Protocol {
         directory.setProtocol(protocol);
         // all attributes of REFER_KEY
         Map<String, String> parameters = new HashMap<String, String>(directory.getUrl().getParameters());
+        //此处的subscribeUrl为
+        //consumer://192.168.1.100/dubbo.common.hello.service.HelloService?
+        //application=dubbo-consumer&dubbo=2.5.3&
+        //interface=dubbo.common.hello.service.HelloService&
+        //methods=sayHello&pid=16409&
+        //side=consumer&timeout=100000&timestamp=1489322133987
         URL subscribeUrl = new URL(Constants.CONSUMER_PROTOCOL, parameters.remove(Constants.REGISTER_IP_KEY), 0, type.getName(), parameters);
         if (!Constants.ANY_VALUE.equals(url.getServiceInterface())
+                //到注册中心注册服务
+                //此处regist是上面一步获得的registry，即是ZookeeperRegistry，包含zkClient的实例
+                //会先经过AbstractRegistry的处理，然后经过FailbackRegistry的处理（解析在下面）
                 && url.getParameter(Constants.REGISTER_KEY, true)) {
             registry.register(subscribeUrl.addParameters(Constants.CATEGORY_KEY, Constants.CONSUMERS_CATEGORY,
                     Constants.CHECK_KEY, String.valueOf(false)));
         }
+        //订阅服务
+        //有服务提供的时候，注册中心会推送服务消息给消费者，消费者再进行服务的引用。
         directory.subscribe(subscribeUrl.addParameter(Constants.CATEGORY_KEY,
                 Constants.PROVIDERS_CATEGORY
                         + "," + Constants.CONFIGURATORS_CATEGORY

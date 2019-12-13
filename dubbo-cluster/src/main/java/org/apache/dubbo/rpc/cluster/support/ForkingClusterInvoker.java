@@ -83,10 +83,14 @@ public class ForkingClusterInvoker<T> extends AbstractClusterInvoker<T> {
                     public void run() {
                         try {
                             Result result = invoker.invoke(invocation);
+                            // 将结果存到阻塞队列中
                             ref.offer(result);
                         } catch (Throwable e) {
                             int value = count.incrementAndGet();
+                            // 仅在 value 大于等于 selected.size() 时，才将异常对象
+                            // 放入阻塞队列中，
                             if (value >= selected.size()) {
+                                // 将异常对象存入到阻塞队列中
                                 ref.offer(e);
                             }
                         }
